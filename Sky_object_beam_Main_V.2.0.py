@@ -4,7 +4,7 @@ from skyfield import api as skyapi
 from skyfield import named_stars
 from skyfield.api import Star, load
 from skyfield.data import hipparcos
-import math
+import numpy as np
 from datetime import datetime,timezone
 import time
 #from main_hardware_function_by_Puripat import *
@@ -17,6 +17,11 @@ la = 13.70305556
 long = 100.5265
 
 deep_sky_objects = {
+    'M112':{
+        'RA': [12,41,22.6],
+        'Dec': [-34,29,56.42],
+        'Name': ['Unknown']
+    },
     'M31': {
         'RA': [0, 44, 2.7],
         'Dec': [41, 16, 54.0],
@@ -104,9 +109,7 @@ def decimal_to_arc(x):
     xsec = (xmin - int(xmin)) * 60
     return [int(xhr), int(xmin), xsec]
 
-
 def getazal(rasp, decsp, la, long, sidlist):
-    rtd = 180 / math.pi
     declist = [(int(decsp[0].split("deg")[0])), (int(decsp[1].split("'")[0])),(float(decsp[2].split('"')[0]))]
     if declist[0] >= 0 and (decsp[0].split("deg")[0]) != "-0":
         DEC = declist[0] + declist[1] / 60 + declist[2] / 3600
@@ -119,16 +122,18 @@ def getazal(rasp, decsp, la, long, sidlist):
         RA = ralist[0] - ralist[1] / 60 - ralist[2] / 3600
     HA = arc_to_decimal(sidlist) - arc_to_decimal(ralist)
     if HA < 0: HA = 24 + HA
+    HA_in_deg = (HA / 24) * 360
+    print(HA_in_deg)
+    s = lambda x: np.sin(np.deg2rad(x))
+    c = lambda x: np.cos(np.deg2rad(x))
+    t = lambda x: np.tan(np.deg2rad(x))
+    al = np.rad2deg( np.asin((s(DEC) * s(la)) + (c(DEC) * c(la) * c(HA_in_deg))))
+    az = np.rad2deg( np.acos((s(la) * s(al) - s(DEC)) / (-c(la) * c(al))))
+    if HA <= 12:  #East
+        az = 360 - az
     print("HA :",decimal_to_arc(HA))
-    s = lambda num: math.sin(num / rtd)
-    c = lambda num: math.cos(num / rtd)
-    t = lambda num: math.tan(num / rtd)
-    if HA > 12:  #East
-        al = math.asin((s(DEC) * s(la)) + (c(DEC) * c(la) * c(HA))) * rtd
-        az = math.acos((s(la) * s(al) - s(DEC)) / (-c(la) * c(al))) * rtd
-    else:  #West
-        al = math.asin((s(DEC) * s(la)) + (c(DEC) * c(la) * c(HA))) * rtd
-        az = 360 - (math.acos((s(la) * s(al) - s(DEC)) / (-c(la) * c(al))) * rtd)
+    print("SID :",sidlist)
+    print(az,al)
     return az, al
 
 ############################## skyfield setup ###################
@@ -137,6 +142,7 @@ with load.open(hipparcos.URL) as f:
     df = hipparcos.load_dataframe(f)
 planets = load('de421.bsp')
 earth = planets['earth']
+sun = planets['sun']
 ra, dec, distance, ha, az, al = 0, 0, 0, 0, 0, 0
 start_time = time.time()
 current_deg_az = 0
@@ -150,6 +156,8 @@ def input(inp):
     ts = load.timescale()
     t = ts.now()
     inp = inp.capitalize()
+    app_sun_ra , app_sun_dec, app_sun_distance  = earth.at(t).observe(sun).apparent().radec()
+    print(app_sun_ra)
     ############# star #############
     if inp in stardict:
         barnards_star = Star.from_dataframe(df.loc[stardict[inp]])
@@ -189,14 +197,13 @@ def run():
             day += 1
     if day >= 365:
         day = day - 365
-    ############################# get sidereal time ###############
+    ################## get sidereal time ###############
     sec_since_vernal = (day * 24 * 60 * 60) + (float(timelist[0]) * 3600) + (float(timelist[1]) * 60) + float(timelist[2])
     local_sec_since_vernal = sec_since_vernal + (long * 60 * 60 / 15)
     sidsec = local_sec_since_vernal * (366.24219 / 365.24219)
-    sidlist = decimal_to_arc(sidsec/(60*60))
+    sidlist = decimal_to_arc(sidsec / (60*60))
     ralist = str(ra).split(" ")
     decsplist = str(dec).split(" ")
-    print(sidlist)
     az, al = getazal(ralist, decsplist, la, long, sidlist)
     need_az = az - current_deg_az
     need_al = al - current_deg_al
