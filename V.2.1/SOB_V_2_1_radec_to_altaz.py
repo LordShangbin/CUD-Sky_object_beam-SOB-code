@@ -27,7 +27,7 @@ def hms_to_deg(x):
 def deg_to_hms(x):
     return x/360 * 24
 
-def getSiderealTime(now):
+def getSTgregorian(now):
     #-------------------- Get day -------------------------#
     day = now.day
     month = now.month
@@ -42,26 +42,16 @@ def getSiderealTime(now):
     second = now.second + (now.microsecond / 1e6)
     sec_since_vernal = (day_since_vernal * 24) + (now.hour) + (now.minute / 60) + (second / 3600) #change all to hours
     utc_sidereal_time = sec_since_vernal * (366.24219 / 365.24219) #Convert tropical time to sidereal time
-    return utc_sidereal_time
+    return utc_sidereal_time % 24
 
-def gmst_from_datetime(dt):
-    # Convert to UTC Julian Date
-    year = dt.year
-    month = dt.month
-    day = dt.day
-    hour = dt.hour + dt.minute/60 + dt.second/3600 + dt.microsecond/3.6e9
-    if month <= 2:
-        year -= 1
-        month += 12
-    A = int(year/100)
-    B = 2 - A + int(A/4)
-    JD = int(365.25*(year+4716)) + int(30.6001*(month+1)) + day + hour/24 + B - 1524.5
-    # Days since J2000
-    D = JD - 2451545.0
-    # GMST in hours (IAU 2006)
-    GMST = 18.697374558 + 24.06570982441908 * D
-    GMST %= 24
-    return GMST
+def getSTjulian(dt):
+    # Reference: https://aa.usno.navy.mil/faq/docs/GAST.php
+    JD = 367 * dt.year - int((7 * (dt.year + int((dt.month + 9) / 12))) / 4) + int((275 * dt.month) / 9) + dt.day + 1721013.5
+    T = (JD - 2451545.0) / 36525
+    GMST = 280.46061837 + 360.98564736629 * (JD - 2451545) + 0.000387933 * T**2 - (T**3) / 38710000
+    GMST = GMST % 360
+    GMST_in_hours = GMST / 15
+    return GMST_in_hours
 
 def getLocalST(utc_sidereal_time, long):
     local_sidereal_time = (utc_sidereal_time + (long / 15)) % 24
