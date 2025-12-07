@@ -7,14 +7,14 @@ from datetime import datetime,timezone
 import juliandate
 import time
 import json
-import SOB_V_2_1_radec_to_altaz as calFunction
+import SOB_V_2_1_radec_to_altaz as calFunc
 import pandas as pd
 
 ts = load.timescale()
 t = ts.now()
 
 la = 13.70305556
-long = 100.5265
+long = 100.5005
 
 #-------------------- Load Sky object data --------------------#
 # Load the JPL ephemeris DE421 (covers 1900-2050).
@@ -57,26 +57,21 @@ else:
 
 #-------------------- Convert (RA, DEC) to (Az, Alt) --------------------#
 now = datetime.now(timezone.utc)
-julian_date_now = pd.Timestamp(now).to_julian_date()
-print(f"Pandas Julian Date : {julian_date_now}")
-jd_now = now.toordinal() + 1721424.5 + (now.hour + now.minute / 60 + now.second / 3600) / 24
-print(f"Julian Date : {jd_now}")
-
-st = calFunction.getSTgregorian(now)
-lst = calFunction.getLocalST(st, long)
-ha = calFunction.getHourAngle(lst, ra)
-az, al = calFunction.getAltazimuth(la, ra, dec, ha)
+st = calFunc.getSiderealTime(now, method='julian')
+lst = calFunc.getLocalST(st, long)
+ha = calFunc.getHourAngle(lst, calFunc.deg_to_hms(ra))
+az, al = calFunc.getAltazimuth(la, ra, dec, ha)
 
 #-------------------- Print results --------------------#
-stlist = calFunction.decimal_to_arc_hms(st)
-ralist = calFunction.decimal_to_arc_hms(ra)
-halist = calFunction.decimal_to_arc_hms(ha)
-declist = calFunction.decimal_to_arc_deg(dec)
-azlist = calFunction.decimal_to_arc_deg(az)
-altlist = calFunction.decimal_to_arc_deg(al)
-print(f"    RA : {ralist[0]}h {int(ralist[1])}m {round(ralist[2], 1)}s")
-print(f"    DEC : {declist[0]}° {int(declist[1])}' {round(declist[2], 1)}\"")
-print(f"    HA : {halist[0]}h {int(halist[1])}m {round(halist[2], 1)}s")
-print(f"    ST : {stlist[0]}h {int(stlist[1])}m {round(stlist[2], 1)}s")
-print(f"    AZ : {azlist[0]}° {int(azlist[1])}' {round(azlist[2], 1)}\"")
-print(f"    AL : {altlist[0]}° {abs(int(altlist[1]))}' {abs(round(altlist[2], 3))}\"")
+stlist = calFunc.decimal_hms_to_arc(lst)
+ralist = calFunc.decimal_deg_to_arc(ra)
+halist = calFunc.decimal_hms_to_arc(ha)
+declist = calFunc.decimal_hms_to_arc(dec)
+azlist = calFunc.decimal_hms_to_arc(az)
+altlist = calFunc.decimal_hms_to_arc(al)
+print(f"    ST : {stlist[0]}h {stlist[1]}m {round(stlist[2], 1)}s")
+print(f"    RA : {ralist[0]}h {ralist[1]}m {round(ralist[2], 1)}s")
+print(f"    DEC : {declist[0]}° {declist[1]}' {round(declist[2], 1)}\"")
+print(f"    HA : {halist[0]}h {halist[1]}m {round(halist[2], 1)}s")
+print(f"    AZ : {azlist[0]}° {azlist[1]}' {round(azlist[2], 1)}\"")
+print(f"    AL : {altlist[0]}° {altlist[1]}' {abs(round(altlist[2], 3))}\"")
