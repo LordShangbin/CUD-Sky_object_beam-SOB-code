@@ -241,9 +241,37 @@ export default function App() {
     setSelected(star);
   };
 
-  const handlePoint = () => {
+  const handlePoint = async () => {
     if (!selected) return;
     setPointedId(selected.catalogId);
+    
+    try {
+      console.log(`Pointing to star: ${selected.name}`);
+      const response = await fetch('http://localhost:5000/api/point-to-star', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: selected.name
+        })
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('Failed to point to star:', error);
+        alert(`Error: ${error.error || 'Failed to point to star'}`);
+        return;
+      }
+      
+      const result = await response.json();
+      console.log('Star pointing result:');
+      console.log(result.output);
+      alert(`Star: ${result.name}\n\n${result.output}`);
+    } catch (error) {
+      console.error('Error calling API:', error);
+      alert('Failed to connect to Sky Object Beam API. Make sure the Python server is running on port 5000.');
+    }
   };
 
   const imageMeta = useMemo(() => {
