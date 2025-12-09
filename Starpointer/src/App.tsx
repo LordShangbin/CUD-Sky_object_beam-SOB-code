@@ -1,6 +1,8 @@
 // src/App.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { STARS, type Star, type StarImageMeta } from "./data/stars";
+import { loadHipparcosData, getHipparcosEntry } from "./data/hipparcos";
+import { calculateAstronomicalData, type AstronomicalData } from "./data/astronomy";
 import "./app.css";
 
 type DragScrollOptions = {
@@ -158,11 +160,43 @@ export default function App() {
   const [pointedId, setPointedId] = useState<number | null>(null);
   const [query, setQuery] = useState("");
   const [imageError, setImageError] = useState(false);
+  const [astronomicalData, setAstronomicalData] = useState<AstronomicalData | null>(null);
+  const [hipparcosLoaded, setHipparcosLoaded] = useState(false);
   const listRef = useRef<HTMLElement | null>(null);
   const detailsRef = useRef<HTMLElement | null>(null);
 
   useDragScroll(listRef, { ignoreClosestSelector: ".search-bar" });
   useDragScroll(detailsRef);
+
+  useEffect(() => {
+    loadHipparcosData().then(() => {
+      setHipparcosLoaded(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!selected || !hipparcosLoaded) {
+      setAstronomicalData(null);
+      return;
+    }
+
+    const updateAstroData = () => {
+      const entry = getHipparcosEntry(selected.catalogId);
+      if (entry) {
+        console.log(`Star ${selected.name} (HIP ${selected.catalogId}): RA=${entry.ra.toFixed(2)}°, Dec=${entry.dec.toFixed(2)}°`);
+        const astroData = calculateAstronomicalData(entry.ra, entry.dec);
+        console.log('Astronomical data:', astroData);
+        setAstronomicalData(astroData);
+      } else {
+        console.warn(`No Hipparcos entry found for ${selected.name} (HIP ${selected.catalogId})`);
+        setAstronomicalData(null);
+      }
+    };
+
+    updateAstroData();
+    const interval = setInterval(updateAstroData, 1000);
+    return () => clearInterval(interval);
+  }, [selected, hipparcosLoaded]);
 
   const sortedStars = useMemo(() => STARS, []);
   const filteredStars = useMemo(() => {
@@ -226,7 +260,6 @@ export default function App() {
           { label: "Magnitude", value: selected.magnitude },
           { label: "Distance", value: selected.distance },
           { label: "Spectral Type", value: selected.spectralType },
-          { label: "RA / Dec", value: selected.coordinates },
         ].filter(fact => Boolean(fact.value))
       : [];
   const starDescription = selected?.summary ?? selected?.description ?? "";
@@ -328,6 +361,34 @@ export default function App() {
                     </div>
                   ) : null}
                 </header>
+                {hipparcosLoaded && astronomicalData && (
+                  <div className="astronomical-data">
+                    <div className="sidereal-time">
+                      <strong>Sidereal Time:</strong> {astronomicalData.siderealTime}
+                    </div>
+                    <ul className="astro-facts">
+                      <li>
+                        <span className="fact-label">Azimuth</span>
+                        <span className="fact-value">{astronomicalData.azimuth}</span>
+                      </li>
+                      <li>
+                        <span className="fact-label">Altitude</span>
+                        <span className="fact-value">{astronomicalData.altitude}</span>
+                      </li>
+                      <li>
+                        <span className="fact-label">Hour Angle</span>
+                        <span className="fact-value">{astronomicalData.hourAngle}</span>
+                      </li>
+                    </ul>
+                  </div>
+                )}
+                {!hipparcosLoaded && (
+                  <div className="astronomical-data loading">
+                    <div className="sidereal-time">
+                      Loading astronomical data...
+                    </div>
+                  </div>
+                )}
                 {starFacts.length > 0 && (
                   <ul className="details-facts">
                     {starFacts.map(fact => (
@@ -394,5 +455,3 @@ export default function App() {
       </div>
   );
 }
-//image gone when all info are placed in .json
-//put this to github too
