@@ -154,6 +154,15 @@ const FALLBACK_IMAGE: StarImageMeta = {
   attribution: "Photo by Greg Rakozy on Unsplash"
 };
 
+type PythonOutput = {
+  st: string;
+  ra: string;
+  dec: string;
+  ha: string;
+  az: string;
+  al: string;
+};
+
 export default function App() {
   const [night, setNight] = useState(false);
   const [selected, setSelected] = useState<Star | null>(initialSelected);
@@ -162,6 +171,7 @@ export default function App() {
   const [imageError, setImageError] = useState(false);
   const [astronomicalData, setAstronomicalData] = useState<AstronomicalData | null>(null);
   const [hipparcosLoaded, setHipparcosLoaded] = useState(false);
+  const [pythonOutput, setPythonOutput] = useState<PythonOutput | null>(null);
   const listRef = useRef<HTMLElement | null>(null);
   const detailsRef = useRef<HTMLElement | null>(null);
 
@@ -244,6 +254,7 @@ export default function App() {
   const handlePoint = async () => {
     if (!selected) return;
     setPointedId(selected.catalogId);
+    setPythonOutput(null);
     
     try {
       console.log(`Pointing to star: ${selected.name}`);
@@ -267,7 +278,16 @@ export default function App() {
       const result = await response.json();
       console.log('Star pointing result:');
       console.log(result.output);
-      alert(`Star: ${result.name}\n\n${result.output}`);
+      setPythonOutput(result.data);
+      
+      setTimeout(() => {
+        if (detailsRef.current) {
+          detailsRef.current.scrollTo({
+            top: detailsRef.current.scrollHeight,
+            behavior: 'smooth'
+          });
+        }
+      }, 100);
     } catch (error) {
       console.error('Error calling API:', error);
       alert('Failed to connect to Sky Object Beam API. Make sure the Python server is running on port 5000.');
@@ -445,9 +465,35 @@ export default function App() {
                     Point to star
                   </button>
                 </div>
-                {pointedId !== null && (
-                  <div className="pointed-readout" role="status">
-                    Pointing output: <span className="pointed-id">{pointedId}</span>
+                {pythonOutput && (
+                  <div className="python-output">
+                    <h3>Sky Object Beam Output</h3>
+                    <div className="output-blocks">
+                      <div className="output-block">
+                        <div className="output-block-label">Sidereal Time</div>
+                        <div className="output-block-value">{pythonOutput.st}</div>
+                      </div>
+                      <div className="output-block">
+                        <div className="output-block-label">Azimuth</div>
+                        <div className="output-block-value">{pythonOutput.az}</div>
+                      </div>
+                      <div className="output-block">
+                        <div className="output-block-label">Altitude</div>
+                        <div className="output-block-value">{pythonOutput.al}</div>
+                      </div>
+                      <div className="output-block">
+                        <div className="output-block-label">Hour Angle</div>
+                        <div className="output-block-value">{pythonOutput.ha}</div>
+                      </div>
+                      <div className="output-block">
+                        <div className="output-block-label">Right Ascension</div>
+                        <div className="output-block-value">{pythonOutput.ra}</div>
+                      </div>
+                      <div className="output-block">
+                        <div className="output-block-label">Declination</div>
+                        <div className="output-block-value">{pythonOutput.dec}</div>
+                      </div>
+                    </div>
                   </div>
                 )}
               </>
