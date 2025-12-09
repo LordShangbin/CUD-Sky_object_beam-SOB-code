@@ -24,7 +24,7 @@ planets = load('de421.bsp')
 earth, mars = planets['earth'], planets['mars']
 stardict = named_stars.named_star_dict
 
-filepath = f'V.2.1\\Deep_sky_object_data.json'
+filepath = f'..\\V.2.1\\Deep_sky_object_data.json'
 deep_sky_objects = json.load(open(filepath))
 
 print("✓ Sky object data loaded successfully")
