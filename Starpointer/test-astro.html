@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Astronomical Calculations Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            background: #2a2a2a;
+            border-radius: 5px;
+        }
+        .label { color: #88f; }
+        .value { color: #8f8; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>Astronomical Calculations Test</h1>
+    <div id="output"></div>
+
+    <script>
+        // Test with Achernar (HIP 7588)
+        // RA: 01h 37m 42.8s = 24.428333° 
+        // Dec: -57° 14' 12.3" = -57.236750°
+        
+        const ra = 24.428333;
+        const dec = -57.236750;
+        const observerLat = 40.7128;
+        const observerLon = -74.0060;
+
+        function calculateJulianDate(date) {
+            const year = date.getUTCFullYear();
+            const month = date.getUTCMonth() + 1;
+            const day = date.getUTCDate();
+            const hour = date.getUTCHours();
+            const minute = date.getUTCMinutes();
+            const second = date.getUTCSeconds();
+            
+            let a = Math.floor((14 - month) / 12);
+            let y = year + 4800 - a;
+            let m = month + 12 * a - 3;
+            
+            const jdn = day + Math.floor((153 * m + 2) / 5) + 365 * y + 
+                        Math.floor(y / 4) - Math.floor(y / 100) + 
+                        Math.floor(y / 400) - 32045;
+            const jd = jdn + (hour - 12) / 24 + minute / 1440 + second / 86400;
+            
+            return jd;
+        }
+
+        function calculateGMST(jd) {
+            const T = (jd - 2451545.0) / 36525.0;
+            let gmst = 280.46061837 + 360.98564736629 * (jd - 2451545.0) + 
+                       T * T * (0.000387933 - T / 38710000.0);
+            
+            gmst = gmst % 360;
+            if (gmst < 0) gmst += 360;
+            
+            return gmst;
+        }
+
+        function calculateLST(jd, longitude) {
+            const gmst = calculateGMST(jd);
+            let lst = gmst + longitude;
+            
+            lst = lst % 360;
+            if (lst < 0) lst += 360;
+            
+            return lst;
+        }
+
+        function degreesToHMS(degrees) {
+            const hours = degrees / 15;
+            const h = Math.floor(hours);
+            const m = Math.floor((hours - h) * 60);
+            const s = ((hours - h - m / 60) * 3600).toFixed(1);
+            return `${h}h ${m}m ${s}s`;
+        }
+
+        function calculateAstronomicalData() {
+            const now = new Date();
+            const jd = calculateJulianDate(now);
+            const lst = calculateLST(jd, observerLon);
+            
+            let hourAngle = lst - ra;
+            if (hourAngle < 0) hourAngle += 360;
+            if (hourAngle > 180) hourAngle -= 360;
+            
+            const haRad = hourAngle * Math.PI / 180;
+            const decRad = dec * Math.PI / 180;
+            const latRad = observerLat * Math.PI / 180;
+            
+            const sinAlt = Math.sin(decRad) * Math.sin(latRad) + 
+                          Math.cos(decRad) * Math.cos(latRad) * Math.cos(haRad);
+            const altitude = Math.asin(sinAlt) * 180 / Math.PI;
+            
+            const cosAz = (Math.sin(decRad) - Math.sin(latRad) * sinAlt) / 
+                         (Math.cos(latRad) * Math.cos(Math.asin(sinAlt)));
+            let azimuth = Math.acos(Math.max(-1, Math.min(1, cosAz))) * 180 / Math.PI;
+            
+            if (Math.sin(haRad) > 0) {
+                azimuth = 360 - azimuth;
+            }
+            
+            return {
+                time: now.toISOString(),
+                jd: jd.toFixed(5),
+                siderealTime: degreesToHMS(lst),
+                azimuth: `${azimuth.toFixed(2)}°`,
+                altitude: `${altitude.toFixed(2)}°`,
+                hourAngle: `${hourAngle.toFixed(2)}°`
+            };
+        }
+
+        function updateDisplay() {
+            const data = calculateAstronomicalData();
+            document.getElementById('output').innerHTML = `
+                <div class="result">
+                    <span class="label">Test Star:</span> 
+                    <span class="value">Achernar (HIP 7588)</span>
+                </div>
+                <div class="result">
+                    <span class="label">RA:</span> 
+                    <span class="value">${ra.toFixed(6)}°</span>
+                </div>
+                <div class="result">
+                    <span class="label">Dec:</span> 
+                    <span class="value">${dec.toFixed(6)}°</span>
+                </div>
+                <div class="result">
+                    <span class="label">Current Time (UTC):</span> 
+                    <span class="value">${data.time}</span>
+                </div>
+                <div class="result">
+                    <span class="label">Julian Date:</span> 
+                    <span class="value">${data.jd}</span>
+                </div>
+                <div class="result">
+                    <span class="label">Sidereal Time:</span> 
+                    <span class="value">${data.siderealTime}</span>
+                </div>
+                <div class="result">
+                    <span class="label">Azimuth:</span> 
+                    <span class="value">${data.azimuth}</span>
+                </div>
+                <div class="result">
+                    <span class="label">Altitude:</span> 
+                    <span class="value">${data.altitude}</span>
+                </div>
+                <div class="result">
+                    <span class="label">Hour Angle:</span> 
+                    <span class="value">${data.hourAngle}</span>
+                </div>
+                <div class="result">
+                    <span class="label">Observer Location:</span> 
+                    <span class="value">${observerLat.toFixed(4)}°N, ${Math.abs(observerLon).toFixed(4)}°W</span>
+                </div>
+            `;
+        }
+
+        updateDisplay();
+        setInterval(updateDisplay, 1000);
+    </script>
+</body>
+</html>

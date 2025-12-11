@@ -1,6 +1,8 @@
 // src/App.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { STARS, type Star, type StarImageMeta } from "./data/stars";
+import { loadHipparcosData, getHipparcosEntry } from "./data/hipparcos";
+import { calculateAstronomicalData, type AstronomicalData } from "./data/astronomy";
 import "./app.css";
 
 type DragScrollOptions = {
@@ -152,17 +154,59 @@ const FALLBACK_IMAGE: StarImageMeta = {
   attribution: "Photo by Greg Rakozy on Unsplash"
 };
 
+type PythonOutput = {
+  st: string;
+  ra: string;
+  dec: string;
+  ha: string;
+  az: string;
+  al: string;
+};
+
 export default function App() {
   const [night, setNight] = useState(false);
   const [selected, setSelected] = useState<Star | null>(initialSelected);
   const [pointedId, setPointedId] = useState<number | null>(null);
   const [query, setQuery] = useState("");
   const [imageError, setImageError] = useState(false);
+  const [astronomicalData, setAstronomicalData] = useState<AstronomicalData | null>(null);
+  const [hipparcosLoaded, setHipparcosLoaded] = useState(false);
+  const [pythonOutput, setPythonOutput] = useState<PythonOutput | null>(null);
   const listRef = useRef<HTMLElement | null>(null);
   const detailsRef = useRef<HTMLElement | null>(null);
 
   useDragScroll(listRef, { ignoreClosestSelector: ".search-bar" });
   useDragScroll(detailsRef);
+
+  useEffect(() => {
+    loadHipparcosData().then(() => {
+      setHipparcosLoaded(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!selected || !hipparcosLoaded) {
+      setAstronomicalData(null);
+      return;
+    }
+
+    const updateAstroData = () => {
+      const entry = getHipparcosEntry(selected.catalogId);
+      if (entry) {
+        console.log(`Star ${selected.name} (HIP ${selected.catalogId}): RA=${entry.ra.toFixed(2)}°, Dec=${entry.dec.toFixed(2)}°`);
+        const astroData = calculateAstronomicalData(entry.ra, entry.dec);
+        console.log('Astronomical data:', astroData);
+        setAstronomicalData(astroData);
+      } else {
+        console.warn(`No Hipparcos entry found for ${selected.name} (HIP ${selected.catalogId})`);
+        setAstronomicalData(null);
+      }
+    };
+
+    updateAstroData();
+    const interval = setInterval(updateAstroData, 1000);
+    return () => clearInterval(interval);
+  }, [selected, hipparcosLoaded]);
 
   const sortedStars = useMemo(() => STARS, []);
   const filteredStars = useMemo(() => {
@@ -207,9 +251,47 @@ export default function App() {
     setSelected(star);
   };
 
-  const handlePoint = () => {
+  const handlePoint = async () => {
     if (!selected) return;
     setPointedId(selected.catalogId);
+    setPythonOutput(null);
+    
+    try {
+      console.log(`Pointing to star: ${selected.name}`);
+      const response = await fetch('http://localhost:5000/api/point-to-star', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: selected.name
+        })
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('Failed to point to star:', error);
+        alert(`Error: ${error.error || 'Failed to point to star'}`);
+        return;
+      }
+      
+      const result = await response.json();
+      console.log('Star pointing result:');
+      console.log(result.output);
+      setPythonOutput(result.data);
+      
+      setTimeout(() => {
+        if (detailsRef.current) {
+          detailsRef.current.scrollTo({
+            top: detailsRef.current.scrollHeight,
+            behavior: 'smooth'
+          });
+        }
+      }, 100);
+    } catch (error) {
+      console.error('Error calling API:', error);
+      alert('Failed to connect to Sky Object Beam API. Make sure the Python server is running on port 5000.');
+    }
   };
 
   const imageMeta = useMemo(() => {
@@ -226,7 +308,6 @@ export default function App() {
           { label: "Magnitude", value: selected.magnitude },
           { label: "Distance", value: selected.distance },
           { label: "Spectral Type", value: selected.spectralType },
-          { label: "RA / Dec", value: selected.coordinates },
         ].filter(fact => Boolean(fact.value))
       : [];
   const starDescription = selected?.summary ?? selected?.description ?? "";
@@ -328,6 +409,34 @@ export default function App() {
                     </div>
                   ) : null}
                 </header>
+                {hipparcosLoaded && astronomicalData && (
+                  <div className="astronomical-data">
+                    <div className="sidereal-time">
+                      <strong>Sidereal Time:</strong> {astronomicalData.siderealTime}
+                    </div>
+                    <ul className="astro-facts">
+                      <li>
+                        <span className="fact-label">Azimuth</span>
+                        <span className="fact-value">{astronomicalData.azimuth}</span>
+                      </li>
+                      <li>
+                        <span className="fact-label">Altitude</span>
+                        <span className="fact-value">{astronomicalData.altitude}</span>
+                      </li>
+                      <li>
+                        <span className="fact-label">Hour Angle</span>
+                        <span className="fact-value">{astronomicalData.hourAngle}</span>
+                      </li>
+                    </ul>
+                  </div>
+                )}
+                {!hipparcosLoaded && (
+                  <div className="astronomical-data loading">
+                    <div className="sidereal-time">
+                      Loading astronomical data...
+                    </div>
+                  </div>
+                )}
                 {starFacts.length > 0 && (
                   <ul className="details-facts">
                     {starFacts.map(fact => (
@@ -356,9 +465,35 @@ export default function App() {
                     Point to star
                   </button>
                 </div>
-                {pointedId !== null && (
-                  <div className="pointed-readout" role="status">
-                    Pointing output: <span className="pointed-id">{pointedId}</span>
+                {pythonOutput && (
+                  <div className="python-output">
+                    <h3>Sky Object Beam Output</h3>
+                    <div className="output-blocks">
+                      <div className="output-block">
+                        <div className="output-block-label">Sidereal Time</div>
+                        <div className="output-block-value">{pythonOutput.st}</div>
+                      </div>
+                      <div className="output-block">
+                        <div className="output-block-label">Azimuth</div>
+                        <div className="output-block-value">{pythonOutput.az}</div>
+                      </div>
+                      <div className="output-block">
+                        <div className="output-block-label">Altitude</div>
+                        <div className="output-block-value">{pythonOutput.al}</div>
+                      </div>
+                      <div className="output-block">
+                        <div className="output-block-label">Hour Angle</div>
+                        <div className="output-block-value">{pythonOutput.ha}</div>
+                      </div>
+                      <div className="output-block">
+                        <div className="output-block-label">Right Ascension</div>
+                        <div className="output-block-value">{pythonOutput.ra}</div>
+                      </div>
+                      <div className="output-block">
+                        <div className="output-block-label">Declination</div>
+                        <div className="output-block-value">{pythonOutput.dec}</div>
+                      </div>
+                    </div>
                   </div>
                 )}
               </>
@@ -394,5 +529,3 @@ export default function App() {
       </div>
   );
 }
-//image gone when all info are placed in .json
-//put this to github too
